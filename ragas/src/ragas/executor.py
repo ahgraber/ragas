@@ -328,11 +328,21 @@ class Executor:
         This is the main sync entry point for executing async jobs.
         """
 
+        # Check if we're in Jupyter/IPython
+        try:
+            from IPython.core.getipython import get_ipython
+
+            if get_ipython() is not None:
+                raise RuntimeError(
+                    "In Jupyter/IPython, use `await executor.aresults()` directly; this avoids the need for nest_asyncio."
+                )
+        except ImportError:
+            pass
+
         async def _async_wrapper():
             return await self.aresults()
 
         return run(_async_wrapper)
-        # return run(self.aresults)
 
 
 def run_async_batch(
