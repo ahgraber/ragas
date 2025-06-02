@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import threading
 import typing as t
@@ -8,8 +7,9 @@ from dataclasses import dataclass, field
 
 from tqdm.auto import tqdm
 
+from ragas.async_utils import as_completed, process_futures, run
 from ragas.run_config import RunConfig
-from ragas.utils import batched
+from ragas.utils import ProgressBarManager, batched
 
 logger = logging.getLogger(__name__)
 
@@ -32,136 +32,6 @@ class ExecutionError:
 
     def __str__(self) -> str:
         return f"ExecutionError(job={self.job_index}, exception={self.exception})"
-
-
-def is_event_loop_running() -> bool:
-    """
-    Check if an event loop is currently running.
-    """
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return False
-    else:
-        return loop.is_running()
-
-
-def run(
-    async_func: t.Union[
-        t.Callable[[], t.Coroutine[t.Any, t.Any, t.Any]],
-        t.Coroutine[t.Any, t.Any, t.Any],
-    ],
-) -> t.Any:
-    """Run an async function in the current event loop or a new one if not running."""
-    try:
-        # Check if we're already in a running event loop
-        loop = asyncio.get_running_loop()
-        # If we get here, we're in a running loop - need nest_asyncio
-        try:
-            import nest_asyncio
-        except ImportError as e:
-            raise ImportError(
-                "It seems like you're running this in a jupyter-like environment. "
-                "Please install nest_asyncio with `pip install nest_asyncio` to make it work."
-            ) from e
-
-        nest_asyncio.apply()
-        # Create the coroutine if it's a callable, otherwise use directly
-        coro = async_func() if callable(async_func) else async_func
-        return loop.run_until_complete(coro)
-
-    except RuntimeError:
-        # No running event loop, so we can use asyncio.run
-        coro = async_func() if callable(async_func) else async_func
-        return asyncio.run(coro)
-
-
-def as_completed(
-    coroutines: t.List[t.Coroutine], max_workers: int
-) -> t.Iterator[asyncio.Future]:
-    """
-    Wrap coroutines with a semaphore if max_workers is specified.
-
-    Returns an iterator of futures that completes as tasks finish.
-    """
-    if max_workers == -1:
-        tasks = [asyncio.create_task(coro) for coro in coroutines]
-    else:
-        semaphore = asyncio.Semaphore(max_workers)
-
-        async def sema_coro(coro):
-            async with semaphore:
-                return await coro
-
-        tasks = [asyncio.create_task(sema_coro(coro)) for coro in coroutines]
-
-    return asyncio.as_completed(tasks)
-
-
-async def process_futures(
-    futures: t.Iterator[asyncio.Future], pbar: t.Optional[tqdm] = None
-) -> t.AsyncGenerator[t.Any, None]:
-    """
-    Process futures with optional progress tracking.
-
-    Args:
-        futures: Iterator of asyncio futures to process (e.g., from asyncio.as_completed)
-        pbar: Optional progress bar to update
-
-    Yields:
-        Results from completed futures as they finish
-    """
-    # Process completed futures as they finish
-    for future in futures:
-        result = await future
-        if pbar:
-            pbar.update(1)
-        yield result
-
-
-class ProgressBarManager:
-    """Manages progress bars for batch and non-batch execution."""
-
-    def __init__(self, desc: str, show_progress: bool):
-        self.desc = desc
-        self.show_progress = show_progress
-
-    def create_single_bar(self, total: int) -> tqdm:
-        """Create a single progress bar for non-batch execution."""
-        return tqdm(
-            total=total,
-            desc=self.desc,
-            disable=not self.show_progress,
-        )
-
-    def create_nested_bars(self, total_jobs: int, batch_size: int):
-        """Create nested progress bars for batch execution."""
-        n_batches = (total_jobs + batch_size - 1) // batch_size
-
-        overall_pbar = tqdm(
-            total=total_jobs,
-            desc=self.desc,
-            disable=not self.show_progress,
-            position=0,
-            leave=True,
-        )
-
-        batch_pbar = tqdm(
-            total=min(batch_size, total_jobs),
-            desc=f"Batch 1/{n_batches}",
-            disable=not self.show_progress,
-            position=1,
-            leave=False,
-        )
-
-        return overall_pbar, batch_pbar, n_batches
-
-    def update_batch_bar(
-        self, batch_pbar: tqdm, batch_num: int, n_batches: int, batch_size: int
-    ):
-        """Update batch progress bar for new batch."""
-        batch_pbar.reset(total=batch_size)
-        batch_pbar.set_description(f"Batch {batch_num}/{n_batches}")
 
 
 @dataclass
