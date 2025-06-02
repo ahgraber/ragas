@@ -89,6 +89,9 @@ def apply_transforms(
     elif isinstance(transforms, Parallel):
         apply_transforms(kg, transforms.transformations, run_config, callbacks)
     elif isinstance(transforms, BaseGraphTransformation):
+        logger.debug(
+            f"Generating execution plan for transformation {transforms.__class__.__name__}"
+        )
         coros = transforms.generate_execution_plan(kg)
         desc = get_desc(transforms)
         run_async_tasks(

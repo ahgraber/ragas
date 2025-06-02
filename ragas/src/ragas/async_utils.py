@@ -1,9 +1,12 @@
 """Async utils."""
 
 import asyncio
+import logging
 import typing as t
 
 from tqdm.auto import tqdm
+
+logger = logging.getLogger(__name__)
 
 
 def is_event_loop_running() -> bool:
@@ -120,9 +123,8 @@ def run_async_tasks(
         with overall_pbar, batch_pbar:
             for i, batch in enumerate(batches, 1):
                 pbm.update_batch_bar(batch_pbar, i, n_batches, len(batch))
-                coros = [coro for coro in batch]
                 async for result in process_futures(
-                    as_completed(coros, max_workers), batch_pbar
+                    as_completed(batch, max_workers), batch_pbar
                 ):
                     results.append(result)
                 overall_pbar.update(len(batch))
@@ -134,9 +136,8 @@ def run_async_tasks(
 
         if not batch_size:
             with pbm.create_single_bar(total_tasks) as pbar:
-                coros = [coro for coro in tasks]
                 async for result in process_futures(
-                    as_completed(coros, max_workers), pbar
+                    as_completed(tasks, max_workers), pbar
                 ):
                     results.append(result)
             return results
@@ -146,6 +147,7 @@ def run_async_tasks(
 
     try:
         loop = asyncio.get_running_loop()
+        logger.debug("Attempting to apply nest_asyncio over a running event loop.")
         try:
             import nest_asyncio
         except ImportError:
@@ -154,6 +156,7 @@ def run_async_tasks(
                 "Please install nest_asyncio with `pip install nest_asyncio` to make it work."
             )
         nest_asyncio.apply()
-        return loop.run_until_complete(_run())
     except RuntimeError:
         return asyncio.run(_run())
+    else:
+        return loop.run_until_complete(_run())
