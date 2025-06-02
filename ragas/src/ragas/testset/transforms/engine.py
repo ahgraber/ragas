@@ -47,7 +47,7 @@ async def run_coroutines(coroutines: t.List[t.Coroutine], desc: str, max_workers
     Run a list of coroutines in parallel.
     """
     for future in tqdm(
-        await as_completed(coroutines, max_workers=max_workers),
+        as_completed(coroutines, max_workers=max_workers),
         desc=desc,
         total=len(coroutines),
         # whether you want to keep the progress bar after completion
