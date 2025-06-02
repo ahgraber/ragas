@@ -126,7 +126,11 @@ class Executor:
             jobs_to_process = self.jobs.copy()
             self.jobs.clear()
 
-        max_workers = (self.run_config or RunConfig()).max_workers
+        max_workers = (
+            self.run_config.max_workers
+            if self.run_config and hasattr(self.run_config, "max_workers")
+            else -1
+        )
         results = []
         pbm = ProgressBarManager(self.desc, self.show_progress)
 

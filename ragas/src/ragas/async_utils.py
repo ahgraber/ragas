@@ -2,7 +2,6 @@
 
 import asyncio
 import typing as t
-from typing import Any, Coroutine, List, Optional
 
 from tqdm.auto import tqdm
 
@@ -20,7 +19,7 @@ def is_event_loop_running() -> bool:
 
 
 def as_completed(
-    coroutines: t.List[t.Coroutine], max_workers: int
+    coroutines: t.Sequence[t.Coroutine], max_workers: int = -1
 ) -> t.Iterator[asyncio.Future]:
     """
     Wrap coroutines with a semaphore if max_workers is specified.
@@ -93,11 +92,12 @@ def run(
 
 
 def run_async_tasks(
-    tasks: List[Coroutine],
-    batch_size: Optional[int] = None,
+    tasks: t.Sequence[t.Coroutine],
+    batch_size: t.Optional[int] = None,
     show_progress: bool = True,
     progress_bar_desc: str = "Running async tasks",
-) -> List[Any]:
+    max_workers: int = -1,
+) -> t.List[t.Any]:
     """
     Execute async tasks with optional batching and progress tracking.
 
@@ -107,6 +107,7 @@ def run_async_tasks(
         tasks: List of coroutines to execute
         batch_size: Optional size for batching tasks. If None, runs all concurrently
         show_progress: Whether to display progress bars
+        max_workers: Maximum number of concurrent tasks (-1 for unlimited)
     """
     from ragas.utils import ProgressBarManager, batched
 
@@ -121,7 +122,7 @@ def run_async_tasks(
                 pbm.update_batch_bar(batch_pbar, i, n_batches, len(batch))
                 coros = [coro for coro in batch]
                 async for result in process_futures(
-                    asyncio.as_completed(coros), batch_pbar
+                    as_completed(coros, max_workers), batch_pbar
                 ):
                     results.append(result)
                 overall_pbar.update(len(batch))
@@ -134,7 +135,9 @@ def run_async_tasks(
         if not batch_size:
             with pbm.create_single_bar(total_tasks) as pbar:
                 coros = [coro for coro in tasks]
-                async for result in process_futures(asyncio.as_completed(coros), pbar):
+                async for result in process_futures(
+                    as_completed(coros, max_workers), pbar
+                ):
                     results.append(result)
             return results
 
