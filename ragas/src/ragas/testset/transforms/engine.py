@@ -105,6 +105,7 @@ def apply_transforms(
         raise ValueError(
             f"Invalid transforms type: {type(transforms)}. Expects a list of BaseGraphTransformations or a Parallel instance."
         )
+    logger.debug("All transformations applied successfully.")
 
 
 def rollback_transforms(kg: KnowledgeGraph, transforms: Transforms):
