@@ -68,14 +68,24 @@ class BaseGraphTransformation(ABC):
         KnowledgeGraph
             The filtered knowledge graph.
         """
-
+        logger.debug("Filtering KnowledgeGraph with %s", self.filter_nodes.__name__)
+        filtered_nodes = [node for node in kg.nodes if self.filter_nodes(node)]
+        node_ids = {node.id for node in filtered_nodes}
+        filtered_relationships = [
+            rel
+            for rel in kg.relationships
+            if (rel.source.id in node_ids) and (rel.target.id in node_ids)
+        ]
+        logger.debug(
+            "Filter reduced KnowledgeGraph by %d/%d nodes and %d/%d relationships",
+            len(kg.nodes) - len(filtered_nodes),
+            len(kg.nodes),
+            len(kg.relationships) - len(filtered_relationships),
+            len(kg.relationships),
+        )
         return KnowledgeGraph(
-            nodes=[node for node in kg.nodes if self.filter_nodes(node)],
-            relationships=[
-                rel
-                for rel in kg.relationships
-                if rel.source in kg.nodes and rel.target in kg.nodes
-            ],
+            nodes=filtered_nodes,
+            relationships=filtered_relationships,
         )
 
     @abstractmethod
@@ -187,7 +197,11 @@ class Extractor(BaseGraphTransformation):
 
         filtered = self.filter(kg)
         plan = [apply_extract(node) for node in filtered.nodes]
-        logger.debug(f"Created {len(plan)} coroutines for {self.__class__.__name__}")
+        logger.debug(
+            "Created %d coroutines for %s",
+            len(plan),
+            self.__class__.__name__,
+        )
         return plan
 
 
@@ -291,7 +305,11 @@ class Splitter(BaseGraphTransformation):
 
         filtered = self.filter(kg)
         plan = [apply_split(node) for node in filtered.nodes]
-        logger.debug(f"Created {len(plan)} coroutines for {self.__class__.__name__}")
+        logger.debug(
+            "Created %d coroutines for %s",
+            len(plan),
+            self.__class__.__name__,
+        )
         return plan
 
 
@@ -345,7 +363,11 @@ class RelationshipBuilder(BaseGraphTransformation):
 
         filtered_kg = self.filter(kg)
         plan = [apply_build_relationships(filtered_kg=filtered_kg, original_kg=kg)]
-        logger.debug(f"Created {len(plan)} coroutines for {self.__class__.__name__}")
+        logger.debug(
+            "Created %d coroutines for %s",
+            len(plan),
+            self.__class__.__name__,
+        )
         return plan
 
 
@@ -392,7 +414,11 @@ class NodeFilter(BaseGraphTransformation):
 
         filtered = self.filter(kg)
         plan = [apply_filter(node) for node in filtered.nodes]
-        logger.debug(f"Created {len(plan)} coroutines for {self.__class__.__name__}")
+        logger.debug(
+            "Created %d coroutines for %s",
+            len(plan),
+            self.__class__.__name__,
+        )
         return plan
 
 
