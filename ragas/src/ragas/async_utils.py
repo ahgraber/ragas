@@ -58,7 +58,11 @@ async def process_futures(
     """
     # Process completed futures as they finish
     for future in futures:
-        result = await future
+        try:
+            result = await future
+        except Exception as e:
+            result = e
+
         if pbar:
             pbar.update(1)
         yield result

@@ -5,6 +5,7 @@ import threading
 import typing as t
 from dataclasses import dataclass, field
 
+import numpy as np
 from tqdm.auto import tqdm
 
 from ragas.async_utils import as_completed, process_futures, run
@@ -12,26 +13,6 @@ from ragas.run_config import RunConfig
 from ragas.utils import ProgressBarManager, batched
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ExecutionError:
-    """
-    Marker class for failed job execution.
-
-    This is returned instead of np.nan to provide more context about the failure
-    and to make error handling more explicit for downstream code.
-    """
-
-    exception: Exception
-    job_index: int
-
-    def __bool__(self) -> bool:
-        """Return False to indicate this is an error result."""
-        return False
-
-    def __str__(self) -> str:
-        return f"ExecutionError(job={self.job_index}, exception={self.exception})"
 
 
 @dataclass
@@ -81,14 +62,16 @@ class Executor:
                 if self.raise_exceptions:
                     raise e
                 else:
+                    exec_name = type(e).__name__
+                    exec_message = str(e)
                     logger.error(
-                        "Exception raised in Job[%s]: %s - %s",
+                        "Exception raised in Job[%s]: %s(%s)",
                         counter,
-                        type(e).__name__,
-                        str(e),
-                        exc_info=True,
+                        exec_name,
+                        exec_message,
+                        exc_info=False,
                     )
-                return counter, ExecutionError(e, counter)
+                return counter, np.nan
 
         return wrapped_callable_async
 
@@ -172,7 +155,16 @@ class Executor:
                 async for result in process_futures(
                     as_completed(coroutines, max_workers), batch_pbar
                 ):
-                    results.append(result)
+                    # Ensure result is always a tuple (counter, value)
+                    if isinstance(result, Exception):
+                        # Find the counter for this failed job
+                        idx = coroutines.index(result.__context__)
+                        counter = (
+                            batch[idx][0].__closure__[1].cell_contents
+                        )  # counter from closure
+                        results.append((counter, result))
+                    else:
+                        results.append(result)
                 # Update overall progress bar for all futures in this batch
                 overall_pbar.update(len(batch))
 
@@ -182,7 +174,15 @@ class Executor:
         async for result in process_futures(
             as_completed(coroutines, max_workers), pbar
         ):
-            results.append(result)
+            # Ensure result is always a tuple (counter, value)
+            if isinstance(result, Exception):
+                idx = coroutines.index(result.__context__)
+                counter = (
+                    jobs[idx][0].__closure__[1].cell_contents
+                )  # counter from closure
+                results.append((counter, result))
+            else:
+                results.append(result)
 
     async def aresults(self) -> t.List[t.Any]:
         """
@@ -192,6 +192,10 @@ class Executor:
         This is the async entry point for executing async jobs when already in an async context.
         """
         results = await self._process_jobs()
+        # If raise_exceptions is True, propagate the exception
+        for r in results:
+            if self.raise_exceptions and isinstance(r, Exception):
+                raise r
         sorted_results = sorted(results, key=lambda x: x[0])
         return [r[1] for r in sorted_results]
 

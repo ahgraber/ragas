@@ -89,8 +89,8 @@ def test_executor_timings():
 
 
 def test_executor_exception_handling():
-    """Test that exceptions are wrapped in ExecutionError when raise_exceptions is False."""
-    from ragas.executor import ExecutionError
+    """Test that exceptions are returned as np.nan when raise_exceptions is False."""
+    import numpy as np
 
     async def fail_task():
         raise ValueError("fail")
@@ -99,9 +99,7 @@ def test_executor_exception_handling():
     executor.submit(fail_task)
     results = executor.results()
     assert len(results) == 1
-    assert isinstance(results[0], ExecutionError)
-    assert isinstance(results[0].exception, ValueError)
-    assert not results[0]
+    assert np.isnan(results[0])
 
 
 def test_executor_exception_raises():
