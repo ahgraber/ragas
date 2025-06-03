@@ -114,21 +114,6 @@ def run_async_tasks(
     """
     from ragas.utils import ProgressBarManager, batched
 
-    async def _process_batched_tasks(tasks, batch_size, pbm, results):
-        total_tasks = len(tasks)
-        batches = batched(tasks, batch_size)
-        overall_pbar, batch_pbar, n_batches = pbm.create_nested_bars(
-            total_tasks, batch_size
-        )
-        with overall_pbar, batch_pbar:
-            for i, batch in enumerate(batches, 1):
-                pbm.update_batch_bar(batch_pbar, i, n_batches, len(batch))
-                async for result in process_futures(
-                    as_completed(batch, max_workers), batch_pbar
-                ):
-                    results.append(result)
-                overall_pbar.update(len(batch))
-
     async def _run():
         total_tasks = len(tasks)
         results = []
@@ -140,9 +125,21 @@ def run_async_tasks(
                     as_completed(tasks, max_workers), pbar
                 ):
                     results.append(result)
-            return results
+        else:
+            total_tasks = len(tasks)
+            batches = batched(tasks, batch_size)
+            overall_pbar, batch_pbar, n_batches = pbm.create_nested_bars(
+                total_tasks, batch_size
+            )
+            with overall_pbar, batch_pbar:
+                for i, batch in enumerate(batches, 1):
+                    pbm.update_batch_bar(batch_pbar, i, n_batches, len(batch))
+                    async for result in process_futures(
+                        as_completed(batch, max_workers), batch_pbar
+                    ):
+                        results.append(result)
+                    overall_pbar.update(len(batch))
 
-        await _process_batched_tasks(tasks, batch_size, pbm, results)
         return results
 
     try:
