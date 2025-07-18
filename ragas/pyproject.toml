@@ -65,13 +65,12 @@ dev = [
     "sacrebleu",
     "r2r",
     "scipy",
-]
-test = [
     "pytest",
     "pytest-xdist[psutil]",
     "pytest-asyncio",
     "nbmake",
 ]
+test = []
 [tool.setuptools]
 package-dir = {"" = "src"}
 
