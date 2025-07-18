@@ -72,7 +72,6 @@ test = [
     "pytest-asyncio",
     "nbmake",
 ]
-test = []
 [tool.setuptools]
 package-dir = {"" = "src"}
 
