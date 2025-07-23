@@ -256,61 +256,67 @@ class KnowledgeGraph:
         depth_limit: int = 3,
     ) -> t.List[t.Set[Node]]:
         """
-        Finds indirect clusters of nodes in the knowledge graph based on a relationship condition.
-        Here if A -> B -> C -> D, then A, B, C, and D form a cluster. If there's also a path A -> B -> C -> E,
-        it will form a separate cluster.
+        Finds unique paths of nodes in the knowledge graph based on a relationship condition,
+        up to a specified depth.
+
+        A "cluster" is defined as a unique path of nodes. For example, if A -> B -> C -> D
+        exists, then {A, B, C, D} is one cluster. If A -> B -> E also exists,
+        {A, B, E} is a distinct cluster.
 
         Parameters
         ----------
         relationship_condition : Callable[[Relationship], bool], optional
-            A function that takes a Relationship and returns a boolean, by default lambda _: True
+            A function that takes a Relationship and returns a boolean, by default lambda _: True.
+            This is used to filter which relationships are traversed.
+        depth_limit : int, optional
+            The maximum length of the paths to find. A path of length N has N+1 nodes.
+            The default is 3, finding paths with up to 4 nodes.
 
         Returns
         -------
         List[Set[Node]]
-            A list of sets, where each set contains nodes that form a cluster.
+            A list of sets, where each set contains the nodes of a unique path.
         """
         clusters = []
-        visited_paths = set()
 
-        relationships = [
-            rel for rel in self.relationships if relationship_condition(rel)
-        ]
+        # 1. Build adjacency list for efficient lookups
+        adjacency = {node.id: [] for node in self.nodes}
+        node_map = {node.id: node for node in self.nodes}
 
-        def dfs(node: Node, cluster: t.Set[Node], depth: int, path: t.Tuple[Node, ...]):
-            if depth >= depth_limit or path in visited_paths:
+        for rel in self.relationships:
+            if relationship_condition(rel):
+                adjacency[rel.source.id].append(rel.target.id)
+                if rel.bidirectional:
+                    adjacency[rel.target.id].append(rel.source.id)
+
+        # 2. DFS from each node to find all unique paths up to depth_limit
+        def dfs(current_path_ids: t.List[uuid.UUID]):
+            # A path is a valid cluster if it has at least 2 nodes
+            if len(current_path_ids) > 1:
+                clusters.append(set(node_map[nid] for nid in current_path_ids))
+
+            # Stop if we have reached the depth limit
+            if len(current_path_ids) > depth_limit:
                 return
-            visited_paths.add(path)
-            cluster.add(node)
 
-            for rel in relationships:
-                neighbor = None
-                if rel.source == node and rel.target not in cluster:
-                    neighbor = rel.target
-                elif (
-                    rel.bidirectional
-                    and rel.target == node
-                    and rel.source not in cluster
-                ):
-                    neighbor = rel.source
+            last_node_id = current_path_ids[-1]
 
-                if neighbor is not None:
-                    dfs(neighbor, cluster.copy(), depth + 1, path + (neighbor,))
-
-            # Add completed path-based cluster
-            if len(cluster) > 1:
-                clusters.append(cluster)
+            # Find neighbors and continue traversal
+            for neighbor_id in adjacency.get(last_node_id, []):
+                # Avoid cycles in the current path
+                if neighbor_id not in current_path_ids:
+                    dfs(current_path_ids + [neighbor_id])
 
         for node in self.nodes:
-            initial_cluster = set()
-            dfs(node, initial_cluster, 0, (node,))
+            dfs([node.id])
 
-        # Remove duplicates by converting clusters to frozensets
-        unique_clusters = [
-            set(cluster) for cluster in set(frozenset(c) for c in clusters)
-        ]
+        # Remove duplicate clusters that may have been found from different start points
+        # or in different orders.
+        if not clusters:
+            return []
 
-        return unique_clusters
+        unique_frozen_sets = {frozenset(cluster) for cluster in clusters}
+        return [set(cluster) for cluster in unique_frozen_sets]
 
     def remove_node(
         self, node: Node, inplace: bool = True
